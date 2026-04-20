@@ -145,50 +145,56 @@
       return scores;
     }
 
-    function uploadData(answers) {
-      state.uploadStatus = 'uploading';
-      render();
-      const experimentData = state.results.filter(r => r.difficulty !== 'demo');
-      const scores = calculateScores(answers);
-      const payload = {
-        participantName: state.participantInfo.name,
-        participantGender: state.participantInfo.gender,
-        participantAge: state.participantInfo.age,
-        participantEducation: state.participantInfo.education,
-        participantUniversity: state.participantInfo.university,
-        participantOccupation: state.participantInfo.occupation,
-        scoreE: scores.E,
-        scoreN: scores.N,
-        scoreP: scores.P,
-        scoreL: scores.L,
-        results: experimentData.map(r => ({
-          ...r,
-          isCorrect: r.userAnswer === r.correctAnswer ? 1 : 0,
-          participantName: state.participantInfo.name,
-          participantGender: state.participantInfo.gender,
-          participantAge: state.participantInfo.age,
-          participantEducation: state.participantInfo.education,
-          participantUniversity: state.participantInfo.university,
-          participantOccupation: state.participantInfo.occupation,
-          scoreE: scores.E,
-          scoreN: scores.N,
-          scoreP: scores.P,
-          scoreL: scores.L
-        }))
-      };
-      fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).then(() => {
-        state.uploadStatus = 'success';
-        render();
-      }).catch(() => {
-        state.uploadStatus = 'error';
-        render();
-      });
-    }
+     let uploadStarted = false;
+     function uploadData(answers) {
+       if (uploadStarted) return;
+       uploadStarted = true;
+       state.uploadStatus = 'uploading';
+       render();
+       const experimentData = state.results.filter(r => r.difficulty !== 'demo');
+       const scores = calculateScores(answers);
+       const submissionId = state.participantInfo.name + '_' + Date.now() + '_' + Math.random().toString(36).substr(2,9);
+       const payload = {
+         submissionId: submissionId,
+         participantName: state.participantInfo.name,
+         participantGender: state.participantInfo.gender,
+         participantAge: state.participantInfo.age,
+         participantEducation: state.participantInfo.education,
+         participantUniversity: state.participantInfo.university,
+         participantOccupation: state.participantInfo.occupation,
+         scoreE: scores.E,
+         scoreN: scores.N,
+         scoreP: scores.P,
+         scoreL: scores.L,
+         results: experimentData.map(r => ({
+           ...r,
+           isCorrect: r.userAnswer === r.correctAnswer ? 1 : 0,
+           participantName: state.participantInfo.name,
+           participantGender: state.participantInfo.gender,
+           participantAge: state.participantInfo.age,
+           participantEducation: state.participantInfo.education,
+           participantUniversity: state.participantInfo.university,
+           participantOccupation: state.participantInfo.occupation,
+           scoreE: scores.E,
+           scoreN: scores.N,
+           scoreP: scores.P,
+           scoreL: scores.L
+         }))
+       };
+       fetch(GOOGLE_SCRIPT_URL, {
+         method: 'POST',
+         mode: 'no-cors',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify(payload)
+       }).then(() => {
+         state.uploadStatus = 'success';
+         render();
+       }).catch(() => {
+         uploadStarted = false;
+         state.uploadStatus = 'error';
+         render();
+       });
+     }
 
     function downloadCSV() {
       const experimentData = state.results.filter(r => r.difficulty !== 'demo');
