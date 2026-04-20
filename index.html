@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Anagram Experiment</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    @keyframes bounce-dot {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .dot-1 { animation: bounce-dot 0.6s infinite; }
+    .dot-2 { animation: bounce-dot 0.6s infinite 0.2s; }
+    .dot-3 { animation: bounce-dot 0.6s infinite 0.4s; }
+    .animate-bounce-icon { animation: bounce-dot 1s infinite; }
+    input[type="radio"] { display: none; }
+
+    /* Prevent iOS zoom on input focus */
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+
+    /* Smooth touch interactions */
+    button, label {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Safe area for notched phones */
+    body {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div id="app"></div>
+
+  <script>
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxy7vnG_cI5dxQzCp0Y8F05jVre1SrqC1bL8um8l9LOvhVFQ9P4CJsRUgRq9zJ10pVfCA/exec';
+
+    // ─── State ───
+    const state = {
+      appState: 'PARTICIPANT_INFO',
+      participantInfo: { name: '', gender: '', age: '' },
+      currentTrialIndex: 0,
+      results: [],
+      inputText: '',
+      shuffledTrials: [],
+      qIndex: 0,
+      qAnswers: {},
+      uploadStatus: 'idle'
+    };
+    let trialStartTime = 0;
+
+    // ─── Trial Data ───
+    const DEMO_TRIALS = [
+      { anagram: 'LCRUE', correctAnswer: 'CRUEL', difficulty: 'demo' },
+      { anagram: 'CSIBA', correctAnswer: 'BASIC', difficulty: 'demo' },
+    ];
+
+    const EXPERIMENT_TRIALS = [
+      { anagram: 'RNGKOOAA', correctAnswer: 'KANGAROO', difficulty: 'hard' },
+      { anagram: 'NRYUOJE', correctAnswer: 'JOURNEY', difficulty: 'hard' },
+      { anagram: 'MURLEBAL', correctAnswer: 'UMBRELLA', difficulty: 'hard' },
+      { anagram: 'LPHOSTIA', correctAnswer: 'HOSPITAL', difficulty: 'hard' },
+      { anagram: 'PMTMYOS', correctAnswer: 'SYMPTOM', difficulty: 'hard' },
+      { anagram: 'TRGHEDUA', correctAnswer: 'DAUGHTER', difficulty: 'hard' },
+      { anagram: 'TRHLGUEA', correctAnswer: 'LAUGHTER', difficulty: 'hard' },
+      { anagram: 'LXRNEATE', correctAnswer: 'EXTERNAL', difficulty: 'hard' },
+      { anagram: 'PHTEANLE', correctAnswer: 'ELEPHANT', difficulty: 'hard' },
+      { anagram: 'NHCIAEM', correctAnswer: 'MACHINE', difficulty: 'hard' },
+      { anagram: 'UOMTNNIA', correctAnswer: 'MOUNTAIN', difficulty: 'hard' },
+      { anagram: 'HYLSPICA', correctAnswer: 'PHYSICAL', difficulty: 'hard' },
+    ];
+
+    // ─── EPQ Questionnaire Items ───
+    const EPQ_ITEMS = [
+      { question: "Does your mood often go up and down?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Do you take much notice of what people think?", annotation: null, subscale: 'P', isReverse: true },
+      { question: "Are you a talkative person?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "If you say you will do something, do you always keep your promise no matter how inconvenient it might be?", annotation: null, subscale: 'L', isReverse: false },
+      { question: "Do you ever feel 'just miserable' for no reason?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Would being in debt worry you?", annotation: null, subscale: 'P', isReverse: true },
+      { question: "Are you rather lively?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "Were you ever greedy by helping yourself to more than your share of anything?", annotation: null, subscale: 'L', isReverse: true },
+      { question: "Are you an irritable person?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Would you take drugs which may have strange or dangerous effects?", annotation: null, subscale: 'P', isReverse: false },
+      { question: "Do you enjoy meeting new people?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "Have you ever blamed someone for doing something you knew was really your fault?", annotation: null, subscale: 'L', isReverse: true },
+      { question: "Are your feelings easily hurt?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Do you prefer to go your own way rather than act by the rules?", annotation: null, subscale: 'P', isReverse: false },
+      { question: "Can you usually let yourself go and enjoy yourself at a lively party?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "Are all your habits good and desirable ones?", annotation: null, subscale: 'L', isReverse: false },
+      { question: "Do you often feel 'fed-up'?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Do good manners and cleanliness matter much to you?", annotation: null, subscale: 'P', isReverse: true },
+      { question: "Do you usually take the initiative in making new friends?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "Have you ever taken anything (even a pin or button) that belonged to someone else?", annotation: null, subscale: 'L', isReverse: true },
+      { question: "Would you call yourself a nervous person?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Do you think marriage is old-fashioned and should be done away with?", annotation: "Do you think the concept of marriage is outdated and unnecessary?", subscale: 'P', isReverse: false },
+      { question: "Can you easily get some life into a rather dull party?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "Have you ever broken or lost something belonging to someone else?", annotation: null, subscale: 'L', isReverse: true },
+      { question: "Are you a worrier?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Do you enjoy co-operating with others?", annotation: null, subscale: 'P', isReverse: true },
+      { question: "Do you tend to keep in the background on social occasions?", annotation: null, subscale: 'E', isReverse: true },
+      { question: "Does it worry you if you know there are mistakes in your work?", annotation: null, subscale: 'P', isReverse: true },
+      { question: "Have you ever said anything bad or nasty about anyone?", annotation: null, subscale: 'L', isReverse: true },
+      { question: "Would you call yourself tense or 'highly strung'?", annotation: "Do you often feel stressed out or on edge?", subscale: 'N', isReverse: false },
+      { question: "Do you think people spend too much time safeguarding their future with savings and insurance?", annotation: null, subscale: 'P', isReverse: false },
+      { question: "Do you like mixing with people?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "As a child were you ever cheeky to your parents?", annotation: "When you were young, did you ever talk back or act disrespectfully to your parents?", subscale: 'L', isReverse: true },
+      { question: "Do you worry too long after an embarrassing experience?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Do you try not to be rude to people?", annotation: null, subscale: 'P', isReverse: true },
+      { question: "Do you like plenty of bustle and excitement around you?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "Have you ever cheated at a game?", annotation: null, subscale: 'L', isReverse: true },
+      { question: "Do you suffer from 'nerves'?", annotation: "Do you struggle with high anxiety or nervousness?", subscale: 'N', isReverse: false },
+      { question: "Would you like other people to be afraid of you?", annotation: null, subscale: 'P', isReverse: false },
+      { question: "Have you ever taken advantage of someone?", annotation: null, subscale: 'L', isReverse: true },
+      { question: "Are you mostly quiet when you are with other people?", annotation: null, subscale: 'E', isReverse: true },
+      { question: "Do you often feel lonely?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Is it better to follow society's rules than go your own way?", annotation: null, subscale: 'P', isReverse: true },
+      { question: "Do other people think of you as being very lively?", annotation: null, subscale: 'E', isReverse: false },
+      { question: "Do you always practice what you preach?", annotation: null, subscale: 'L', isReverse: false },
+      { question: "Are you often troubled about feelings of guilt?", annotation: null, subscale: 'N', isReverse: false },
+      { question: "Do you sometimes put off until tomorrow what you ought to do today?", annotation: null, subscale: 'L', isReverse: true },
+      { question: "Can you get a party going?", annotation: null, subscale: 'E', isReverse: false },
+    ];
+
+    // ─── Helpers ───
+    function getReactionTimeSec() {
+      return Number(((performance.now() - trialStartTime) / 1000).toFixed(3));
+    }
+
+    function shuffleArray(arr) {
+      return [...arr].sort(() => Math.random() - 0.5);
+    }
+
+    function calculateScores(answers) {
+      const scores = { E: 0, N: 0, P: 0, L: 0 };
+      EPQ_ITEMS.forEach((item, idx) => {
+        const ans = answers[idx];
+        const point = item.isReverse ? (ans === false ? 1 : 0) : (ans === true ? 1 : 0);
+        scores[item.subscale] += point;
+      });
+      return scores;
+    }
+
+    function uploadData(answers) {
+      state.uploadStatus = 'uploading';
+      render();
+      const experimentData = state.results.filter(r => r.difficulty !== 'demo');
+      const scores = calculateScores(answers);
+      const payload = {
+        participantName: state.participantInfo.name,
+        participantGender: state.participantInfo.gender,
+        participantAge: state.participantInfo.age,
+        scoreE: scores.E,
+        scoreN: scores.N,
+        scoreP: scores.P,
+        scoreL: scores.L,
+        results: experimentData.map(r => ({
+          ...r,
+          isCorrect: r.userAnswer === r.correctAnswer ? 1 : 0,
+          participantName: state.participantInfo.name,
+          participantGender: state.participantInfo.gender,
+          participantAge: state.participantInfo.age,
+          scoreE: scores.E,
+          scoreN: scores.N,
+          scoreP: scores.P,
+          scoreL: scores.L
+        }))
+      };
+      fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(() => {
+        state.uploadStatus = 'success';
+        render();
+      }).catch(() => {
+        state.uploadStatus = 'error';
+        render();
+      });
+    }
+
+    function downloadCSV() {
+      const experimentData = state.results.filter(r => r.difficulty !== 'demo');
+      const scores = calculateScores(state.qAnswers);
+      let csv = "Timestamp,Name,Gender,Age,Score_E,Score_N,Score_P,Score_L,Trial,Anagram,Difficulty,UserAnswer,CorrectAnswer,IsCorrect,UsedAI,RT\n";
+      experimentData.forEach((row, i) => {
+        const isCorrect = row.userAnswer === row.correctAnswer ? 1 : 0;
+        csv += `${new Date().toISOString()},${state.participantInfo.name},${state.participantInfo.gender},${state.participantInfo.age},${scores.E},${scores.N},${scores.P},${scores.L},${i + 1},"${row.anagram}",${row.difficulty},"${row.userAnswer}","${row.correctAnswer}",${isCorrect},${row.usedAI},${row.reactionTimeSec}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `experiment_${state.participantInfo.name}.csv`;
+      link.click();
+    }
+
+    // ─── Render Functions ───
+    function render() {
+      const app = document.getElementById('app');
+      // Reset input for trial screens before rendering
+      if (['DEMO_1', 'DEMO_2', 'EXPERIMENT'].includes(state.appState)) {
+        state.inputText = '';
+        trialStartTime = performance.now();
+      }
+      switch (state.appState) {
+        case 'PARTICIPANT_INFO': app.innerHTML = renderInfo(); break;
+        case 'INSTRUCTIONS': app.innerHTML = renderInstructions(); break;
+        case 'DEMO_1': app.innerHTML = renderTrialScreen(DEMO_TRIALS[0].anagram, true); break;
+        case 'DEMO_2': app.innerHTML = renderTrialScreen(DEMO_TRIALS[1].anagram, true); break;
+        case 'DEMO_1_FEEDBACK':
+        case 'DEMO_2_FEEDBACK': app.innerHTML = renderDemoFeedback(); break;
+        case 'EXPERIMENT_INSTRUCTIONS': app.innerHTML = renderExperimentInstructions(); break;
+        case 'EXPERIMENT': app.innerHTML = renderTrialScreen(state.shuffledTrials[state.currentTrialIndex].anagram, false); break;
+        case 'PROCESSING': app.innerHTML = renderProcessing(); break;
+        case 'QUESTIONNAIRE_INSTRUCTIONS': app.innerHTML = renderQuestionnaireInstructions(); break;
+        case 'QUESTIONNAIRE': app.innerHTML = renderQuestionnaire(); break;
+        case 'RESULTS': app.innerHTML = renderResults(); break;
+      }
+      lucide.createIcons();
+      if (['DEMO_1', 'DEMO_2', 'EXPERIMENT'].includes(state.appState)) {
+        const inp = document.getElementById('answerInput');
+        if (inp) setTimeout(() => inp.focus(), 50);
+      }
+    }
+
+    function renderInfo() {
+      const p = state.participantInfo;
+      return `
+      <div class="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 sm:p-8 border border-slate-100">
+          <div class="flex justify-center mb-4 sm:mb-6">
+            <div class="bg-indigo-100 p-3 rounded-full">
+              <i data-lucide="user" class="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600"></i>
+            </div>
+          </div>
+          <h1 class="text-xl sm:text-2xl font-bold text-center text-slate-800 mb-2">Participant Entry</h1>
+          <form onsubmit="handleStart(event)" class="space-y-4 sm:space-y-6 mt-4 sm:mt-6">
+            <input
+              type="text"
+              maxlength="4"
+              value="${p.name}"
+              oninput="state.participantInfo.name=this.value.toUpperCase()"
+              class="w-full px-4 py-3.5 rounded-lg border border-slate-300 outline-none focus:ring-2 focus:ring-indigo-500 text-base"
+              placeholder="Initials (e.g., JD)"
+              required
+            />
+            <div class="flex gap-3 sm:gap-4">
+              ${['Male','Female'].map(g => `
+                <label class="flex-1 flex items-center justify-center p-3 sm:p-3.5 border-2 rounded-lg cursor-pointer transition-all select-none ${p.gender === g ? 'border-indigo-500 bg-indigo-50 text-indigo-600' : 'border-slate-300 text-slate-600 hover:border-slate-400'}">
+                  <input type="radio" name="gender" ${p.gender === g ? 'checked' : ''} onchange="state.participantInfo.gender='${g}'; render()" />
+                  <span class="text-sm font-medium">${g}</span>
+                </label>
+              `).join('')}
+            </div>
+            <input
+              type="number"
+              min="1"
+              value="${p.age}"
+              oninput="state.participantInfo.age=this.value"
+              class="w-full px-4 py-3.5 rounded-lg border border-slate-300 outline-none focus:ring-2 focus:ring-indigo-500 text-base"
+              placeholder="Age"
+              required
+            />
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold py-3.5 sm:py-4 rounded-lg flex items-center justify-center transition-colors text-base">
+              Start Experiment <i data-lucide="arrow-right" class="w-5 h-5 ml-2"></i>
+            </button>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    function renderInstructions() {
+      return `
+      <div class="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
+        <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-5 sm:p-8 md:p-10 border border-slate-100">
+          <div class="flex items-center mb-4 sm:mb-6 space-x-3">
+            <i data-lucide="brain" class="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600 flex-shrink-0"></i>
+            <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800">Task Instructions</h1>
+          </div>
+          <div class="space-y-4 sm:space-y-6 text-slate-600 text-base sm:text-lg leading-relaxed">
+            <p>
+              In this experiment, you will be presented with a series of <strong>anagrams</strong>. 
+              An anagram is a word whose letters have been jumbled up. Your task is to unscramble the letters to find the correct word.
+            </p>
+            
+            <div class="bg-indigo-50 border-l-4 border-indigo-500 p-3 sm:p-4 rounded-r-lg space-y-1 sm:space-y-2">
+              <p class="text-indigo-900 font-bold italic text-sm sm:text-base">"Your game, your strategy."</p>
+              <p class="text-indigo-900 text-sm sm:text-base">The only rule is: Get to the answer. How you get there is entirely up to you.</p>
+            </div>
+
+            <p>For every anagram, you have two options:</p>
+            
+            <ul class="list-disc pl-5 sm:pl-6 space-y-2 sm:space-y-3 text-slate-700 text-sm sm:text-base md:text-lg">
+              <li><strong>Solve it yourself:</strong> Type the correct word and click "Submit Answer".</li>
+              <li><strong>AI Assist:</strong> If you find an anagram difficult, you can click the <span class="text-purple-700 font-semibold uppercase">AI Assist</span> button. The system will solve the anagram for you.</li>
+            </ul>
+
+            <div class="bg-slate-100 p-3 sm:p-4 rounded-lg text-slate-700 border-l-4 border-slate-400">
+              <p class="italic font-medium text-sm sm:text-base">"There's no scoreboard for how you play — only for what you score."</p>
+              <p class="mt-1 sm:mt-2 text-xs sm:text-sm">Remember, getting as many correct answers as possible is what counts.</p>
+            </div>
+            
+            <p class="text-xs sm:text-sm text-slate-500 italic pt-3 sm:pt-4 border-t border-slate-100">
+              Next, we will go through a quick demonstration to familiarize you with the system.
+            </p>
+          </div>
+
+          <div class="mt-6 sm:mt-10 flex justify-end">
+            <button
+              onclick="state.appState='DEMO_1'; render()"
+              class="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold py-3 px-6 sm:py-3.5 sm:px-8 rounded-lg flex items-center transition-colors text-sm sm:text-base"
+            >
+              Start Practice <i data-lucide="chevron-right" class="w-5 h-5 ml-1"></i>
+            </button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function renderTrialScreen(anagram, isDemo) {
+      const submitHandler = isDemo
+        ? (state.appState === 'DEMO_1' ? 'handleDemo1Submit' : 'handleDemo2Submit')
+        : 'handleExperimentSubmit';
+      const aiHandler = isDemo
+        ? (state.appState === 'DEMO_1' ? 'handleDemo1AI' : 'handleDemo2AI')
+        : 'handleExperimentAI';
+      return `
+      <div class="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-3 sm:p-4 md:p-6">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-5 sm:p-8 md:p-10 border border-slate-100">
+          <div class="text-center mb-5 sm:mb-8">
+            <span class="bg-indigo-100 text-indigo-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              ${isDemo ? 'Practice Trial' : 'Task Trial'}
+            </span>
+          </div>
+          <div class="flex justify-center mb-6 sm:mb-10 overflow-x-auto py-2">
+            <div class="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-mono font-bold text-slate-800 tracking-[0.2em] sm:tracking-[0.3em] md:tracking-[0.4em] lg:tracking-[0.5em] whitespace-nowrap uppercase">
+              ${anagram}
+            </div>
+          </div>
+          <form onsubmit="${submitHandler}(event)" class="space-y-4 sm:space-y-6">
+            <input
+              id="answerInput"
+              type="text"
+              value="${state.inputText}"
+              oninput="state.inputText=this.value"
+              class="w-full text-center text-lg sm:text-xl md:text-2xl py-3 sm:py-4 rounded-xl border-2 border-slate-200 focus:border-indigo-500 outline-none uppercase transition-all"
+              placeholder="TYPE WORD HERE"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="characters"
+              spellcheck="false"
+            />
+            <div class="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2 sm:pt-4">
+              <button
+                type="submit"
+                class="flex-1 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 disabled:bg-slate-300 text-white font-bold py-3.5 sm:py-4 rounded-xl text-base sm:text-lg transition-colors min-h-[48px]"
+              >
+                Submit Answer
+              </button>
+              <button
+                type="button"
+                onclick="${aiHandler}()"
+                class="flex-1 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold py-3.5 sm:py-4 rounded-xl text-base sm:text-lg flex items-center justify-center transition-colors min-h-[48px]"
+              >
+                <i data-lucide="bot" class="w-5 h-5 sm:w-6 sm:h-6 mr-2"></i> AI Assist
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    function renderDemoFeedback() {
+      const result = state.results[state.results.length - 1];
+      const isDemo2 = state.appState === 'DEMO_2_FEEDBACK';
+      const icon = result.usedAI
+        ? '<i data-lucide="bot" class="w-12 h-12 sm:w-16 sm:h-16 text-indigo-600"></i>'
+        : '<i data-lucide="check-circle-2" class="w-12 h-12 sm:w-16 sm:h-16 text-emerald-600"></i>';
+      return `
+      <div class="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
+        <div class="bg-white rounded-2xl shadow-xl max-w-xl w-full p-5 sm:p-8 md:p-10 text-center border border-slate-100">
+          <div class="mb-4 sm:mb-6 flex justify-center">${icon}</div>
+          <h2 class="text-2xl sm:text-3xl font-bold text-slate-800 mb-3 sm:mb-4">${result.usedAI ? "AI Assist Used" : "Word Submitted"}</h2>
+          <div class="bg-slate-50 rounded-xl p-4 sm:p-6 mb-5 sm:mb-8 inline-block">
+            <p class="text-slate-500 mb-1 uppercase text-xs font-bold tracking-widest">Correct Answer</p>
+            <p class="text-xl sm:text-2xl font-bold text-emerald-600">${result.correctAnswer}</p>
+          </div>
+          <p class="text-slate-600 mb-6 sm:mb-10 text-base sm:text-lg leading-relaxed">
+            ${isDemo2
+              ? "Practice is complete. During the task, you can solve anagrams yourself or use the AI Assist strategically to increase your performance."
+              : "Next, we will try using the AI Assist feature to see how it solves difficult anagrams for you."}
+          </p>
+          <button
+            onclick="state.appState='${isDemo2 ? 'EXPERIMENT_INSTRUCTIONS' : 'DEMO_2'}'; render()"
+            class="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold py-3.5 sm:py-4 rounded-xl flex items-center justify-center text-base sm:text-lg transition-colors min-h-[48px]"
+          >
+            ${isDemo2 ? "Continue to Main Task" : "Try AI Assist"} <i data-lucide="arrow-right" class="ml-2"></i>
+          </button>
+        </div>
+      </div>`;
+    }
+
+    function renderExperimentInstructions() {
+      return `
+      <div class="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 text-center">
+        <div class="bg-white rounded-2xl shadow-xl max-w-xl w-full p-5 sm:p-8 md:p-10 border border-slate-100">
+          <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 mb-4 sm:mb-6">Task Ready</h1>
+          <p class="text-slate-600 text-base sm:text-lg mb-6 sm:mb-8 leading-relaxed">
+            You are now ready to begin. The anagrams will be presented one after another. 
+            Remember: Smart strategies lead to high scores. Use all tools at your disposal.
+          </p>
+          <button
+            onclick="state.shuffledTrials=shuffleArray(EXPERIMENT_TRIALS); state.appState='EXPERIMENT'; render()"
+            class="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold py-3.5 sm:py-4 px-8 sm:px-10 rounded-xl text-base sm:text-lg flex items-center mx-auto shadow-lg hover:scale-105 transition-all min-h-[48px]"
+          >
+            Begin Task <i data-lucide="chevron-right" class="ml-2"></i>
+          </button>
+        </div>
+      </div>`;
+    }
+
+    function renderProcessing() {
+      return `
+      <div class="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 text-white">
+        <i data-lucide="bot" class="w-16 h-16 sm:w-24 sm:h-24 text-indigo-400 animate-bounce-icon mb-4"></i>
+        <h2 class="text-xl sm:text-2xl font-bold mb-4 tracking-wide uppercase">AI Processing...</h2>
+        <div class="flex gap-2">
+          <div class="w-3 h-3 bg-indigo-500 rounded-full dot-1"></div>
+          <div class="w-3 h-3 bg-indigo-500 rounded-full dot-2"></div>
+          <div class="w-3 h-3 bg-indigo-500 rounded-full dot-3"></div>
+        </div>
+      </div>`;
+    }
+
+    function renderQuestionnaireInstructions() {
+      return `
+      <div class="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 text-center">
+        <div class="bg-white rounded-2xl shadow-xl max-w-xl w-full p-5 sm:p-8 md:p-10 border border-slate-100">
+          <div class="flex justify-center mb-4 sm:mb-6">
+            <i data-lucide="clipboard-list" class="w-12 h-12 sm:w-16 sm:h-16 text-indigo-600"></i>
+          </div>
+          <h1 class="text-xl sm:text-2xl font-bold text-slate-800 mb-3 sm:mb-4">Task Complete</h1>
+          <p class="text-slate-600 mb-6 sm:mb-8 text-base sm:text-lg leading-relaxed">
+            Thank you for completing the anagrams. Now, please answer a final personality questionnaire. Respond quickly based on your first instinct.
+          </p>
+          <button
+            onclick="state.appState='QUESTIONNAIRE'; render()"
+            class="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold py-3.5 sm:py-4 px-8 sm:px-10 rounded-xl text-base sm:text-lg min-h-[48px]"
+          >
+            Start Questionnaire
+          </button>
+        </div>
+      </div>`;
+    }
+
+    function renderQuestionnaire() {
+      const item = EPQ_ITEMS[state.qIndex];
+      const annotationHTML = item.annotation
+        ? `<p class="text-slate-400 text-sm sm:text-base mt-3 italic">[${item.annotation}]</p>`
+        : '';
+      return `
+      <div class="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-5 sm:p-8 md:p-10 border border-slate-100 text-center">
+          <h2 class="text-lg sm:text-xl md:text-2xl font-bold text-slate-800 mb-2 sm:mb-4 leading-snug">${item.question}</h2>
+          ${annotationHTML}
+          <div class="flex gap-3 sm:gap-4 mt-6 sm:mt-10">
+            <button
+              id="btn-yes"
+              onclick="handleQAnswer(true, 'btn-yes')"
+              class="flex-1 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 border-2 border-slate-200 hover:border-slate-400 py-4 sm:py-5 px-4 sm:px-6 rounded-xl text-lg sm:text-xl font-bold transition-all min-h-[56px] sm:min-h-[64px]"
+            >
+              Yes
+            </button>
+            <button
+              id="btn-no"
+              onclick="handleQAnswer(false, 'btn-no')"
+              class="flex-1 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 border-2 border-slate-200 hover:border-slate-400 py-4 sm:py-5 px-4 sm:px-6 rounded-xl text-lg sm:text-xl font-bold transition-all min-h-[56px] sm:min-h-[64px]"
+            >
+              No
+            </button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function renderResults() {
+      const statusHTML = state.uploadStatus === 'uploading'
+        ? '<p class="text-indigo-600 font-bold animate-pulse text-sm sm:text-base">Syncing data to secure database...</p>'
+        : state.uploadStatus === 'success'
+          ? '<p class="text-emerald-600 font-bold text-sm sm:text-base">✓ Data synchronized successfully.</p>'
+          : state.uploadStatus === 'error'
+            ? '<p class="text-rose-600 font-bold text-sm sm:text-base">Sync error. Please download the backup CSV file.</p>'
+            : '';
+      return `
+      <div class="min-h-screen bg-slate-50 p-4 sm:p-6 flex items-center justify-center">
+        <div class="max-w-3xl w-full bg-white rounded-2xl shadow-xl p-5 sm:p-8 md:p-10 border border-slate-100">
+          <div class="text-center mb-6 sm:mb-10">
+            <div class="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+              <i data-lucide="check-circle-2" class="w-10 h-10 sm:w-12 sm:h-12"></i>
+            </div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-800">Study Completed</h1>
+          </div>
+          <div class="bg-indigo-900 rounded-2xl p-5 sm:p-6 md:p-8 text-white mb-6 sm:mb-8">
+            <h2 class="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 flex items-center gap-2"><i data-lucide="info" class="w-5 h-5 sm:w-6 sm:h-6"></i> Debriefing</h2>
+            <div class="space-y-3 sm:space-y-4 text-indigo-100 leading-relaxed text-sm sm:text-base md:text-lg">
+              <p>Thank you for your participation! The true focus of this study was to examine <strong>Cognitive Offloading and AI Dependency</strong>.</p>
+              <p>While the task was framed as an anagram test, we were actually investigating how personality traits correlate with the decision to utilize AI assistance versus manual effort. This research helps us understand human-AI interaction in complex tasks.</p>
+            </div>
+          </div>
+          <div class="flex flex-col items-center gap-4 sm:gap-6">
+            ${statusHTML}
+            <button onclick="downloadCSV()" class="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold py-3.5 sm:py-4 px-8 sm:px-10 rounded-xl flex items-center gap-2 shadow-lg hover:scale-105 transition-all text-sm sm:text-base min-h-[48px]">
+              <i data-lucide="download" class="w-5 h-5"></i> Download Data Backup
+            </button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // ─── Event Handlers ───
+    function handleStart(e) {
+      e.preventDefault();
+      if (state.participantInfo.name && state.participantInfo.gender && state.participantInfo.age) {
+        state.appState = 'INSTRUCTIONS';
+        render();
+      }
+    }
+
+    function saveTrialResult(trial, usedAI, nextState) {
+      const answer = usedAI ? trial.correctAnswer : state.inputText.toUpperCase();
+      const rt = getReactionTimeSec();
+      state.results.push({
+        ...trial,
+        userAnswer: answer,
+        usedAI,
+        reactionTimeSec: rt
+      });
+      state.appState = nextState;
+      render();
+    }
+
+    function handleDemo1Submit(e) {
+      e.preventDefault();
+      if (state.inputText.trim()) saveTrialResult(DEMO_TRIALS[0], false, 'DEMO_1_FEEDBACK');
+    }
+
+    function handleDemo1AI() {
+      state.appState = 'PROCESSING';
+      render();
+      setTimeout(() => saveTrialResult(DEMO_TRIALS[0], true, 'DEMO_1_FEEDBACK'), 2000);
+    }
+
+    function handleDemo2Submit(e) {
+      e.preventDefault();
+      if (state.inputText.trim()) saveTrialResult(DEMO_TRIALS[1], false, 'DEMO_2_FEEDBACK');
+    }
+
+    function handleDemo2AI() {
+      state.appState = 'PROCESSING';
+      render();
+      setTimeout(() => saveTrialResult(DEMO_TRIALS[1], true, 'DEMO_2_FEEDBACK'), 2000);
+    }
+
+    function saveExperimentResult(answer, usedAI) {
+      const rt = getReactionTimeSec();
+      state.results.push({
+        ...state.shuffledTrials[state.currentTrialIndex],
+        userAnswer: answer,
+        usedAI,
+        reactionTimeSec: rt
+      });
+      if (state.currentTrialIndex < state.shuffledTrials.length - 1) {
+        state.currentTrialIndex++;
+        state.appState = 'EXPERIMENT';
+        render();
+      } else {
+        state.appState = 'QUESTIONNAIRE_INSTRUCTIONS';
+        render();
+      }
+    }
+
+    function handleExperimentSubmit(e) {
+      e.preventDefault();
+      if (state.inputText.trim()) saveExperimentResult(state.inputText.toUpperCase(), false);
+    }
+
+    function handleExperimentAI() {
+      state.appState = 'PROCESSING';
+      render();
+      setTimeout(() => {
+        saveExperimentResult(state.shuffledTrials[state.currentTrialIndex].correctAnswer, true);
+      }, 2000);
+    }
+
+    function handleQAnswer(ans, btnId) {
+      // Highlight the selected button
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.classList.remove('bg-white', 'text-slate-700', 'border-slate-200');
+        btn.classList.add('bg-indigo-500', 'text-white', 'border-indigo-500');
+      }
+
+      const newAnswers = { ...state.qAnswers, [state.qIndex]: ans };
+      state.qAnswers = newAnswers;
+
+      setTimeout(() => {
+        if (state.qIndex < EPQ_ITEMS.length - 1) {
+          state.qIndex++;
+          render();
+        } else {
+          state.appState = 'RESULTS';
+          render();
+          setTimeout(() => uploadData(newAnswers), 500);
+        }
+      }, 300);
+    }
+
+    // ─── Initial Render ───
+    document.addEventListener('DOMContentLoaded', () => {
+      render();
+    });
+  </script>
+</body>
+</html>
